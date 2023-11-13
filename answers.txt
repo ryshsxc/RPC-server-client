@@ -1,0 +1,19 @@
+Yixiang Wang, yixiang3, 1266196
+1, In this project, server can accpet calls from everyone because there is no restriction made on this. For real world RPC server it should limit to just a subset of users for safety measure.
+2, In this project this should be provided by RPC framework because this will simplify the program and reduce the number of connections/requests needed. For real world RPC these functions should be implemented by the functions that use RPC framework to separate responsibility. RPC framework should work as a layer to support the further functions
+3, Because reliable in-order data transfer is required, TCP should be used for both this project and in real world. The trade off is that there will be more message sent between client and server to establish connection.
+4, The listening socket can be created in either rpc_init_server or rpc_serve_all, but socket created for incoming connection should be implemented in rpc_serve_all because that is where server start to accept connections.
+5, In this project both rpc_client and rpc_server are allocated dynamically using malloc, but generally it can be either way. In the code because we cannot make assumption about server.c or client.c we have to allocate it dynamically.
+6, If server and client have different endian order, numbers like integers are stored differently inside their memory. Sending them without conversion will lead to different value for same integer representation. To overcome the problem both server and client can use ntohl() (Or htobe64() in this project for 64bit output) to convert the integer to network byte order, which is the order agreed by all TCP/IP users, and then use htonl() (be64toh() in this project) function to convert the integer from network byte order to the local order whether it is big-endian or little-endian.
+
+Protocol detail
+The server will create a listening socket waiting in an infinite loop for request. The client will need to first establish a connection (a persist TCP connection) with the server, and then start to make request.
+
+rpc find request:
+Client send "200 <name of the handler in question> " to server. The name is limited to 1000 byte. The server will respond with "200 " if the name of handler is present in server or "201 " if not.
+
+rpc call request:
+Client send "300 <name of the handler in question> " to server, the server will reply with "300 " if the handler is found, and with "301 " if not. If name is not found, the client will print the error message to stderr. Otherwise the client will send data2_len to server. Server will respond with "300 " on success, and then client will send data1 (limit to 64 byte), server will respond with "300 " on success. Both data1 and data2_len are converted to a fixed-length 64 byte uint64_t under network byte order. If data2_len is not 0, client will then proceed to send data2 to server. There is no limitation in size of data2 to be sent except the hardware limitations, the server will read data2 from socket using the size indicated by data2_len that has been sent over.
+Once server finishs calculation, it will attemp to send rpc data back to client. The procedure is the same as sending data from client to server, except that the server will first inform client using "400 ", and client will need to respond with "400 " after receive infom message, data2_len and data1 instead of "300 ".
+
+TCP transport layer is used to deal with IP packet loss/duplication and IP packet maximum allowed size. An alternative choice is UDP, which would reduce delay but the functionality of packet loss/duplication will need to be implemented in this protocol, so it's not prefered.
